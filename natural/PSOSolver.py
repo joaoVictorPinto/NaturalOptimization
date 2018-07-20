@@ -1,5 +1,5 @@
 
-__all__ = ['Particle', 'pso']
+__all__ = ['pso']
 
 from Logger import Logger, LoggingLevel, EnumStringification, retrieve_kw, NotSet
 import numpy as np
@@ -8,45 +8,14 @@ import sys
 import copy
 
 
-# helper function to display a progress bar
-def progressbar(it, prefix="", size=60):
-    count = len(it)
-    def _show(_i):
-        x = int(size*_i/count)
-        sys.stdout.write("%s[%s%s] %i/%i\r" % (prefix, "█"*x, "."*(size-x), _i, count))
-        sys.stdout.flush()
-    _show(0)
-    for i, item in enumerate(it):
-        yield item
-        _show(i+1)
-    sys.stdout.write("\n")
-    sys.stdout.flush()
 
-
-
-def minor_error(error, best_error):  
-  return error < best_error
-
-
-
-class Particle:
-
-  def __init__(self, dim, minx, maxx):
-    self.dim      = dim
-    self.velocity = np.zeros(dim)
-    #self.velocity = ((maxx-minx)*np.random.random(dim) + minx)
-    self.position = ((maxx-minx)*np.random.random(dim) + minx)
-    self.pbest    = np.zeros(dim)
-    self.pfitness = sys.float_info.max
-
-
-
-class PSOSolver:
+class PSOSolver(Logger):
   
   _screenshot = list()
 
-  def __init__(self):
-    pass
+  def __init__(self, **kw):
+    Logger.__init__(self,**kw)
+    
 
   def calculate(self, p, gbest):
     r1 = np.random.random()
@@ -56,21 +25,23 @@ class PSOSolver:
              (self.c2 * r2 * (gbest   - p.position)) )  
 
 
-  def solver( self, solutions, fitness, is_the_best, **kw ):
-    
+  def solver( self, solutions, cost_function, is_the_best, **kw ):
+ 
+    target       = kw.pop('target'      , 0.0  )
     self.w       = kw.pop('inertia'     , 0.729)
     self.c1      = kw.pop('cognitive'   , 2    )
     self.c2      = kw.pop('social'      , 2    )
     maxvel       = kw.pop('maxVel'      , 10   )
+    maxFES       = kw.pop('maxFES'      , 1000 )
     #minx         = kw.pop('minx'        , -1   )
     #maxx         = kw.pop('maxx'        , 1    )
     doScreenShot = kw.pop('screenshot'  , False)
     show         = kw.pop('show'        , 10   )
-    fitness_args = kw.pop('fitness_args', None )
-    max_generations = kw.pop('max_generations', 1000)
+    max_generations = kw.pop('max_generations', 1000000)
 
     gbest    = None #Best global particle
-    gfitness = sys.float_info.max #Best error found
+    gfitness = None #Best error found
+    gerror = sys.float_info.max #Best error found
     fitness_evolution = list()
     generation  = 0
     pscreenshot = list()
@@ -78,13 +49,18 @@ class PSOSolver:
 
     #Initialize all structures
     for p in solutions:
-      f = fitness(p.position, fitness_args)
-      if is_the_best( f, p.pfitness):
+      f = cost_function.fitness(p.position)
+      error = abs(target - f)
+      if error < abs(target-p.pfitness):
         p.pfitness = f
         p.pbest  = copy.copy(p.position)
-      if is_the_best( f, gfitness ):
+
+      if not gfitness:
+        gfitness = f; gbest = copy.copy(p.position)
+      elif  error < abs(target-gfitness): 
         gfitness = f
         gbest  = copy.copy(p.position)
+      
       #screenshot for the first time
       if doScreenShot:
         pscreenshot.append(copy.copy(p.position))
@@ -94,11 +70,12 @@ class PSOSolver:
     trigger=False
 
     #Loop
-    while generation < max_generations:
+    generation=0; cmaxFES=0;
+    while gerror>1e-8:
 
       #Status display
       if generation % show == 0 and generation > 1:
-        print ('Generation = %d, best fit = %.10f')%(generation, gfitness)
+        self._logger.info('Generation = %d, best fit = %.10f, error = %.10f (maxFEX=%d)' ,generation, gfitness,gerror, cmaxFES)
         if doScreenShot:  trigger=True;
       #Screenshot
       if trigger:  pscreenshot = list()
@@ -106,32 +83,39 @@ class PSOSolver:
       fitness_evolution.append(gfitness)
       #Loop over particles
       for p in solutions:    
-        
         #Apply fitness
-        f = fitness(p.position, fitness_args)
+        cmaxFES+=1
+        f = cost_function.fitness(p.position) 
+        error = abs(target - f)
 
-        if is_the_best( f, p.pfitness):
+        if error < abs(target-p.pfitness):
           p.pfitness = f
           p.pbest  = copy.copy(p.position)
-        if is_the_best( f, gfitness ):
+        
+        if error < abs(target-gfitness): 
           gfitness = f
           gbest  = copy.copy(p.position)
-  
+          gerror = error
+
         #Calculate velocity
         p.velocity = self.calculate(p,gbest)
         
         #Limits for velocity
-        p.velocity[p.velocity >    maxvel] =    maxvel
-        p.velocity[p.velocity < -1*maxvel] = -1*maxvel
+        #p.velocity[p.velocity >    maxvel] =    maxvel
+        #p.velocity[p.velocity < -1*maxvel] = -1*maxvel
 
         #Update position
         p.position += p.velocity
-        
         #Limits for position
-        #p.position[p.position > maxx] = -0.1*maxx
-        #p.position[p.position < minx] = -0.1*minx
+        bounds = p.bounds()
+        p.position[p.position > bounds[1]] = bounds[1]
+        p.position[p.position < bounds[0]] = bounds[0]
 
         if trigger:  pscreenshot.append(copy.copy(p.position))
+        
+        if cmaxFES>maxFES:
+          self._logger.warning('Number of Max FES reached. Stop pso solver...')
+          return gbest, fitness_evolution
 
       #end particles
       if trigger:  self._screenshot.append(pscreenshot)
@@ -139,7 +123,7 @@ class PSOSolver:
       generation+=1
     #end epochs
 
-    print 'gbest position: ', gbest
+    #self._logger.info( 'gbest position: ', gbest )
     return gbest, fitness_evolution
 
   def get_screenshot(self):
@@ -148,9 +132,32 @@ class PSOSolver:
 pso = PSOSolver()
 
 #************************** Main *****************************
-#from PSOSolver import Ackley_fitness, minor_error, pso
+
+
+#from Particle import Particle
 #particles = list()
 #for i in range(100):
-#  particles.append( Particle( 2, -10, 10 ) )
-#pso.solver( particles, Ackley_fitness ,minor_error, max_generations = 2000, screenshoot = True)
+#  particles.append( Particle( 10, -100, 100 ) )
+#from Prob import CEC2014
+#cost_function = CEC2014( dim = 10, prob = 6 ) 
+#
+#
+#minor_error = None
+#gbest, f_evolution = pso.solver( particles, 
+#                                 cost_function ,
+#                                 minor_error, 
+#                                 screenshoot = True, 
+#                                 show=1,
+#                                 cognitive=0.9, 
+#                                 social=0.4, 
+#                                 inertia=.95,
+#                                 target=600., 
+#                                 maxvel=0*4*100., 
+#                                 maxFES=1000000
+#                                )
+
+
+
+
+
 
