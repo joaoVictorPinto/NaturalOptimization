@@ -1,5 +1,5 @@
 
-__all__ = ['jade']
+__all__ = ['jade', 'JADESolver']
 
 from Logger import Logger, retrieve_kw
 import sys, random, os
@@ -46,7 +46,7 @@ class JADESolver(Logger):
 
     p                  = retrieve_kw( kw, 'p'                 , max(0.05, 3/float(len(population))) )
     c                  = retrieve_kw( kw, 'c'                 , 0.1 )
-    mu_cr              = retrieve_kw( kw, 'mu_cr'             , 0.9 )
+    mu_cr              = retrieve_kw( kw, 'mu_cr'             , 0.5 )
     mu_f               = retrieve_kw( kw, 'mu_f'              , 0.6 )
 
     min_error          = retrieve_kw( kw, 'min_error'         , 1e-8)
@@ -112,7 +112,6 @@ class JADESolver(Logger):
         # crossover
         x_trial = deepcopy( individual )
         x_trial.feature = self.crossover( individual.feature, x_donor.feature, CR[idx])        
-        #print 'ind = ', individual.fitness ,' - trial = ',x_trial.fitness, ' - F = ',F[idx], ' - CR = ',CR[idx],' - mu_cr = ',mu_cr, ' - mu_f = ',mu_f
         x_trial.fitness = cost_func.fitness( x_trial.feature )[0]
         nmaxfes+=1
 
@@ -151,7 +150,7 @@ class JADESolver(Logger):
       generation+=1
 
       if gerror < min_error:
-        self._logger.info('Stop loop because the global error is < than min_error parameter.')
+        self._logger.warning('Stop loop because the global error is < than min_error parameter.')
         break
     # end of while loop
   

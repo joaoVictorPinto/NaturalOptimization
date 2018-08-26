@@ -260,3 +260,6 @@ class Logger(object):
   def getLevel(self):
     return self._level
 
+  def getModuleLogger(self):
+    return self._logger
+

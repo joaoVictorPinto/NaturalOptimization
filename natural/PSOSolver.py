@@ -1,5 +1,5 @@
 
-__all__ = ['pso']
+__all__ = ['pso', 'PSOSolver']
 
 from Logger import Logger, LoggingLevel, EnumStringification, retrieve_kw, NotSet
 import numpy as np
@@ -11,149 +11,118 @@ import copy
 
 class PSOSolver(Logger):
   
-  _screenshot = list()
 
   def __init__(self, **kw):
     Logger.__init__(self,**kw)
     
 
   def calculate(self, p, gbest):
-    r1 = np.random.random()
-    r2 = np.random.random()
+    r1 = np.random.rand()
+    r2 = np.random.rand()
     return ( (self.w  * p.velocity) + \
              (self.c1 * r1 * (p.pbest - p.position) ) + \
              (self.c2 * r2 * (gbest   - p.position)) )  
 
 
-  def solver( self, solutions, cost_function, is_the_best, **kw ):
+  def solver( self, particles, cost_function, answer, **kw ):
  
-    target       = kw.pop('target'      , 0.0  )
-    self.w       = kw.pop('inertia'     , 0.729)
-    self.c1      = kw.pop('cognitive'   , 2    )
-    self.c2      = kw.pop('social'      , 2    )
-    maxvel       = kw.pop('maxVel'      , 10   )
-    maxFES       = kw.pop('maxFES'      , 1000 )
-    #minx         = kw.pop('minx'        , -1   )
-    #maxx         = kw.pop('maxx'        , 1    )
-    doScreenShot = kw.pop('screenshot'  , False)
-    show         = kw.pop('show'        , 10   )
-    max_generations = kw.pop('max_generations', 1000000)
+    self.w       = kw.pop('inertia'     , 0.7298  )
+    self.c1      = kw.pop('cognitive'   , 2.05    )
+    self.c2      = kw.pop('social'      , 2.05    )
+    maxFES       = kw.pop('maxFES'      , 1000    )
+
 
     gbest    = None #Best global particle
-    gfitness = None #Best error found
+    gfitness = sys.float_info.max #Best error found
     gerror = sys.float_info.max #Best error found
     fitness_evolution = list()
+    error_evolution = list()
     generation  = 0
-    pscreenshot = list()
-
-
-    #Initialize all structures
-    for p in solutions:
-      f = cost_function.fitness(p.position)
-      error = abs(target - f)
-      if error < abs(target-p.pfitness):
-        p.pfitness = f
-        p.pbest  = copy.copy(p.position)
-
-      if not gfitness:
-        gfitness = f; gbest = copy.copy(p.position)
-      elif  error < abs(target-gfitness): 
+  
+    for p in particles:    
+      f = cost_function.fitness(p.position) 
+      # Local error
+      current_error = abs(answer - f)
+      p.pfitness = f; p.pbest  = copy.copy(p.position)
+      # is the current particle better than the global particle position
+      if current_error < gerror: 
         gfitness = f
         gbest  = copy.copy(p.position)
-      
-      #screenshot for the first time
-      if doScreenShot:
-        pscreenshot.append(copy.copy(p.position))
-      
-    if doScreenShot:  self._screenshot.append(pscreenshot)
-    #screenshot trigger ctrl by show
-    trigger=False
+        gerror = current_error
+
 
     #Loop
     generation=0; cmaxFES=0;
     while gerror>1e-8:
 
       #Status display
-      if generation % show == 0 and generation > 1:
-        self._logger.info('Generation = %d, best fit = %.10f, error = %.10f (maxFEX=%d)' ,generation, gfitness,gerror, cmaxFES)
-        if doScreenShot:  trigger=True;
-      #Screenshot
-      if trigger:  pscreenshot = list()
+      self._logger.info('Generation = %d, best fit = %.10f, error = %.10f (maxFEX=%d)' ,generation, gfitness,gerror, cmaxFES)
 
-      fitness_evolution.append(gfitness)
+      
       #Loop over particles
-      for p in solutions:    
+      for p in particles:    
+        
+        #Calculate velocity
+        p.velocity = self.calculate(p,gbest)        
+        #Update position
+        p.position += p.velocity
+
         #Apply fitness
         cmaxFES+=1
         f = cost_function.fitness(p.position) 
-        error = abs(target - f)
-
-        if error < abs(target-p.pfitness):
+        p.fitness = f
+        # Local error
+        current_error = abs(answer - f)
+       
+        # is the currenct interation better than the local position
+        if current_error < abs(answer-p.pfitness):
           p.pfitness = f
-          p.pbest  = copy.copy(p.position)
+          p.pbest  = p.position
         
-        if error < abs(target-gfitness): 
+        # is the current particle better than the global particle position
+        if current_error < gerror: 
           gfitness = f
           gbest  = copy.copy(p.position)
-          gerror = error
+          gerror = current_error
 
-        #Calculate velocity
-        p.velocity = self.calculate(p,gbest)
-        
-        #Limits for velocity
-        #p.velocity[p.velocity >    maxvel] =    maxvel
-        #p.velocity[p.velocity < -1*maxvel] = -1*maxvel
+      fitness_evolution.append(gfitness)
+      error_evolution.append(gerror)
 
-        #Update position
-        p.position += p.velocity
-        #Limits for position
-        bounds = p.bounds()
-        p.position[p.position > bounds[1]] = bounds[1]
-        p.position[p.position < bounds[0]] = bounds[0]
+      if cmaxFES>maxFES:
+        self._logger.warning('Number of Max FES reached. Stop pso solver...')
+        return gbest, fitness_evolution, error_evolution
 
-        if trigger:  pscreenshot.append(copy.copy(p.position))
-        
-        if cmaxFES>maxFES:
-          self._logger.warning('Number of Max FES reached. Stop pso solver...')
-          return gbest, fitness_evolution
 
       #end particles
-      if trigger:  self._screenshot.append(pscreenshot)
-      trigger=False
       generation+=1
     #end epochs
 
     #self._logger.info( 'gbest position: ', gbest )
-    return gbest, fitness_evolution
+    return gbest, fitness_evolution, error_evolution
 
-  def get_screenshot(self):
-    return self._screenshot
 
 pso = PSOSolver()
 
 #************************** Main *****************************
-
-
-#from Particle import Particle
+#
+#
+#from Population import Particle
 #particles = list()
+#D=10
 #for i in range(100):
-#  particles.append( Particle( 10, -100, 100 ) )
-#from Prob import CEC2014
-#cost_function = CEC2014( dim = 10, prob = 6 ) 
+#  particles.append( Particle( D, -100, 100) )
+#from Prob import CEC2014, Arkley
+#cost_function = CEC2014( dim = D, prob = 6 )
+##cost_function = Arkley()
+#answer=600
 #
-#
-#minor_error = None
 #gbest, f_evolution = pso.solver( particles, 
 #                                 cost_function ,
-#                                 minor_error, 
-#                                 screenshoot = True, 
-#                                 show=1,
-#                                 cognitive=0.9, 
-#                                 social=0.4, 
-#                                 inertia=.95,
-#                                 target=600., 
-#                                 maxvel=0*4*100., 
-#                                 maxFES=1000000
+#                                 answer, 
+#                                 cognitive= 1.4962, 
+#                                 social=1.4962, 
+#                                 inertia=0.7298,
+#                                 maxFES=100000
 #                                )
 
 

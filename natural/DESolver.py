@@ -1,5 +1,5 @@
 
-__all__ = ['de']
+__all__ = ['de', 'DESolver']
 
 from Logger import Logger, retrieve_kw
 import sys, random, os
@@ -18,10 +18,10 @@ class DESolver(Logger):
   # crossover method for xt and donor
   def crossover(self, feature_a, feature_b, recombination_rate ):
     trial = list()
+    i_rand = random.randint(0,len(feature_a)-1)
     for idx in range( len(feature_a) ):
-
       crossover = random.random()
-      if crossover > recombination_rate:
+      if crossover > recombination_rate or idx == i_rand:
         trial.append( feature_a[idx] ) # append target feature
       else:
         trial.append( feature_b[idx] ) # append donor feature
@@ -39,21 +39,21 @@ class DESolver(Logger):
   def solver(self, population, cost_func, answer, **kw):
 
     recombination_rate = retrieve_kw( kw, 'recombination_rate', 0.9 )
-    mutate_factor      = retrieve_kw( kw, 'mudate_factor'     , 0.5 )
+    mutate_factor      = retrieve_kw( kw, 'mutate_factor'     , 0.5 )
     min_error          = retrieve_kw( kw, 'min_error'         , 1e-8)
     maxfes             = retrieve_kw( kw, 'maxfes'            , 1000)
   
     
-    fitness_evolution = []
-    best_individual = None
+    gfitness_evol = []; gerror_evol = []
+    gbest_individual = None
     #fitness_avg_evolution = []
     gerror = sys.float_info.max # Best error found
-    best_fitness = sys.float_info.max # Best error found
+    gbest_fitness = sys.float_info.max # Best error found
     generation  = 0; nmaxfes = 0
 
     while nmaxfes < maxfes:
 
-      generation_fitness = []; 
+      gen_fitness = []; 
 
       # calculate the fitness for all individual
       for idx, individual in enumerate(population):
@@ -77,30 +77,31 @@ class DESolver(Logger):
         # selection
         if x_trial.fitness < individual.fitness:
           population[idx] = x_trial
-          generation_fitness.append( x_trial.fitness )
+          gen_fitness.append( x_trial.fitness )
         else:
-          generation_fitness.append( individual.fitness )
+          gen_fitness.append( individual.fitness )
 
       # calculation stat evolution of the current generation
       
-      best_fitness = min(generation_fitness)
+      best_fitness = min(gen_fitness)
       #best_avg_fitness = sum(generation_fitness)/ float(len(population))
-      best_individual = deepcopy( population[ generation_fitness.index(best_fitness) ] )
+      gbest_individual = deepcopy( population[ gen_fitness.index(best_fitness) ] )
       # hold some evololution values
-      fitness_evolution.append( best_fitness )
+      gfitness_evol.append( best_fitness )
       #fitness_avg_evolution.append( best_fitness )
       # calculate the generation error between the best fit and the expected answer
       gerror = abs(answer - best_fitness)
-    
+      gerror_evol.append(gerror)
+
       self._logger.info( 'Generation %d, best_fit = %1.2f, error = %1.8f, maxFES = %d', generation, best_fitness, gerror, nmaxfes)
       generation+=1
 
       if gerror < min_error:
-        self._logger.info('Stop loop because the global error is < than min_error parameter.')
+        self._logger.warning('Stop loop because the global error is < than min_error parameter.')
         break
     # end of while loop
   
-    return best_individual, fitness_evolution
+    return gbest_individual, gfitness_evol, gerror_evol
 
 
 
@@ -109,13 +110,6 @@ class DESolver(Logger):
 de = DESolver()
 
 
-# test DE solver
-dim = 10
-population = [ Individual(dim, -100, 100) for _ in range(1000)]
-from Prob import CEC2014
-cost_function = CEC2014( dim = dim, prob = 1 ) 
-
-de.solver( population, cost_function, 100 , maxfes = dim*10000)
 
 
 
