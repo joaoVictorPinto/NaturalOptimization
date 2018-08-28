@@ -162,11 +162,11 @@ class CMAESSolver(Logger):
 cmaes = CMAESSolver()
 
 #************************** Main *****************************
-D=30
-from Prob import CEC2014, Arkley
-cost_function = CEC2014( dim = D, prob = 2 )
-answer=200
-cmaes.solver( D, cost_function ,answer) 
+#D=30
+#from Prob import CEC2014, Arkley
+#cost_function = CEC2014( dim = D, prob = 2 )
+#answer=200
+#cmaes.solver( D, cost_function ,answer) 
 
 
 
