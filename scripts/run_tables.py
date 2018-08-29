@@ -75,11 +75,11 @@ for idx, fname in enumerate(files):
     obj = f[key]
     stroutput = '| {0:<8} | {1:<17} | {2:<17} | {3:<17} | {4:<17} | {5:<17} | {6:<15} |'.format(
                 '%s'%key,
-                '%1.6f'%obj['error_best'], 
-                '%1.6f'%obj['error_worst'],
-                '%1.6f'%obj['error_median'],
-                '%1.6f'%obj['error_mean'],
-                '%1.6f'%obj['error_std'],
+                '%1.4f'%obj['error_best'], 
+                '%1.4f'%obj['error_worst'],
+                '%1.4f'%obj['error_median'],
+                '%1.4f'%obj['error_mean'],
+                '%1.4f'%obj['error_std'],
                 '%1.4f'%obj['success_rate'])
     mainLogger.info(stroutput)
     foutput.write(stroutput+'\n')
